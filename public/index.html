@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Weather Prediction</title>
+  <meta name="description" content="24-hour weather forecasts from a seasonal ARIMA model trained on two years of local history.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M2 22 C8 22 10 10 16 10 S24 18 30 14' fill='none' stroke='%233559A8' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Weather Prediction home">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M2 22 C8 22 10 10 16 10 S24 18 30 14"/></svg>
+      <span>Weather Prediction</span>
+    </a>
+    <div class="search" role="search">
+      <label class="visually-hidden" for="city">Search for a city</label>
+      <input id="city" type="search" autocomplete="off" spellcheck="false"
+             placeholder="Search a city" role="combobox" aria-expanded="false"
+             aria-controls="city-options" aria-autocomplete="list">
+      <ul id="city-options" role="listbox" hidden></ul>
+    </div>
+  </header>
+
+  <main>
+    <section id="empty" class="empty">
+      <h1>Forecasts learned from local history</h1>
+      <p>Pick a place. The model trains on two years of hourly weather from that spot, then predicts the next 24 hours with honest uncertainty bands.</p>
+      <div class="quick" aria-label="Suggested places">
+        <button type="button" data-lat="50.088" data-lon="14.421" data-name="Prague" data-country="Czechia" data-tz="Europe/Prague">Prague</button>
+        <button type="button" data-lat="51.509" data-lon="-0.126" data-name="London" data-country="United Kingdom" data-tz="Europe/London">London</button>
+        <button type="button" data-lat="40.714" data-lon="-74.006" data-name="New York" data-country="United States" data-tz="America/New_York">New York</button>
+        <button type="button" data-lat="35.690" data-lon="139.692" data-name="Tokyo" data-country="Japan" data-tz="Asia/Tokyo">Tokyo</button>
+        <button type="button" data-lat="-33.868" data-lon="151.207" data-name="Sydney" data-country="Australia" data-tz="Australia/Sydney">Sydney</button>
+      </div>
+    </section>
+
+    <section id="loading" class="loading" hidden aria-live="polite">
+      <div class="loading-line" aria-hidden="true"></div>
+      <p id="loading-text">Loading forecast</p>
+      <p class="loading-sub">A first visit to a place trains a new model, which takes about ten seconds. After that it is cached for a day.</p>
+    </section>
+
+    <section id="error" class="error" hidden role="alert">
+      <p id="error-text"></p>
+      <button type="button" id="retry">Try again</button>
+    </section>
+
+    <article id="result" hidden>
+      <section class="hero" aria-labelledby="place">
+        <div class="now">
+          <h1 id="place"></h1>
+          <p class="now-meta" id="now-meta"></p>
+          <p class="now-temp"><span id="now-temp"></span><span class="unit">°C</span></p>
+          <dl class="now-facts">
+            <div><dt>Next 24 h</dt><dd id="range"></dd></div>
+            <div><dt>Rain chance peak</dt><dd id="rain-peak"></dd></div>
+            <div><dt>Humidity</dt><dd id="now-hum"></dd></div>
+            <div><dt>Wind</dt><dd id="now-wind"></dd></div>
+          </dl>
+          <p class="stale" id="stale" hidden>Showing yesterday's model because retraining failed.</p>
+        </div>
+        <figure class="fan">
+          <div class="fan-canvas"><canvas id="fan-chart" aria-label="Temperature for the past 24 hours and forecast for the next 24 hours with uncertainty bands"></canvas></div>
+          <figcaption class="legend">
+            <span class="key key-obs">Observed</span>
+            <span class="key key-model">Model forecast</span>
+            <span class="key key-band">80% and 95% ranges</span>
+            <span class="key key-nwp">Open-Meteo physics forecast, for reference</span>
+          </figcaption>
+        </figure>
+      </section>
+
+      <section class="hours" aria-labelledby="hours-title">
+        <h2 id="hours-title">Hour by hour</h2>
+        <div class="hour-strip" id="hour-strip" tabindex="0" aria-label="Hourly forecast, scrollable"></div>
+      </section>
+
+      <section class="detail" aria-labelledby="detail-title">
+        <div class="section-head">
+          <h2 id="detail-title">Other conditions</h2>
+          <div class="tabs" role="tablist" aria-label="Variable">
+            <button role="tab" aria-selected="true" data-var="humidity">Humidity</button>
+            <button role="tab" aria-selected="false" data-var="pressure">Pressure</button>
+            <button role="tab" aria-selected="false" data-var="windSpeed">Wind</button>
+            <button role="tab" aria-selected="false" data-var="rain">Rain chance</button>
+          </div>
+        </div>
+        <div class="detail-canvas"><canvas id="detail-chart"></canvas></div>
+      </section>
+
+      <section class="quality" aria-labelledby="quality-title">
+        <h2 id="quality-title">How good is this model here?</h2>
+        <p class="lede" id="quality-lede"></p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Variable</th>
+                <th scope="col">Typical error</th>
+                <th scope="col">Better than “same as now”</th>
+                <th scope="col">Inside 80% range</th>
+                <th scope="col">Fitted model</th>
+              </tr>
+            </thead>
+            <tbody id="quality-rows"></tbody>
+          </table>
+        </div>
+        <div class="quality-charts">
+          <figure>
+            <div class="section-head small">
+              <figcaption>Error by hours ahead</figcaption>
+              <select id="lead-var" aria-label="Variable for error chart">
+                <option value="temperature">Temperature</option>
+                <option value="humidity">Humidity</option>
+                <option value="pressure">Pressure</option>
+                <option value="windSpeed">Wind</option>
+              </select>
+            </div>
+            <div class="chart-box"><canvas id="lead-chart"></canvas></div>
+          </figure>
+          <figure>
+            <div class="section-head small">
+              <figcaption>Rain chance: forecast vs what happened</figcaption>
+            </div>
+            <div class="chart-box"><canvas id="rel-chart"></canvas></div>
+            <p class="note" id="rain-note"></p>
+          </figure>
+        </div>
+      </section>
+
+      <section class="method" aria-labelledby="method-title">
+        <h2 id="method-title">How it works</h2>
+        <div class="method-cols">
+          <p>For each place we download two years of hourly temperature, humidity, pressure, wind and precipitation from the Open-Meteo archive. A seasonal mean, built from yearly and daily cycles and their interaction, captures what is normal for each hour of each season.</p>
+          <p>What is left over is modeled with a seasonal ARIMA per variable. The candidate orders are screened by Hannan–Rissanen regression and refined by least squares, and the best one is picked by AIC. Differencing is chosen on a two-week validation window, which also calibrates the ranges.</p>
+          <p>Rain chance comes from a logistic regression on the forecast humidity, pressure tendency, wind and temperature anomaly, plus whether it was raining when the forecast was made. Every number in the section above is measured on the last 30 days, which the model never saw during training.</p>
+        </div>
+      </section>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <p>Weather data from <a href="https://open-meteo.com/">Open-Meteo</a> (CC BY 4.0). Model and site built with Node.js.</p>
+  </footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

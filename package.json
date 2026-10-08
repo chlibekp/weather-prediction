@@ -1,0 +1,18 @@
+{
+  "name": "weather-prediction",
+  "version": "1.0.0",
+  "description": "24-hour weather forecasts from a seasonal ARIMA model trained on historical data",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "^5.2.1"
+  },
+  "private": true
+}
